@@ -1,13 +1,24 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Proof } from "@/components/Proof";
 import { FilmStrip } from "@/components/FilmStrip";
 import { ToastHost, toast } from "@/components/Toast";
 import { store } from "@/lib/client-store";
+import { autoCaptionInk } from "@/lib/caption-ink";
 import {
   CAPTION,
+  CAPTION_COLORS,
+  CAPTION_FONTS,
+  isHexColor,
+  CAPTION_ROTATE,
+  CAPTION_SIZE,
+  captionMaxSizeMm,
+  captionRotate,
+  captionSizeMm,
+  captionDefaultPos,
+  captionPlace,
   PAPER_COLORS,
   defaultSpec,
   effectivePixels,
@@ -25,15 +36,15 @@ interface Props {
   paperColors: Record<string, string> | null;
   finishEnabled: boolean;
   calibrated: boolean;
+  stampChar: string;
 }
 
 /** 編輯器：不是分步精靈，所有設定在同一頁，相紙即時更新。DESIGN_SYSTEM §3.12 */
-export function EditorClient({ code, photo, photos, paperColors, finishEnabled, calibrated }: Props) {
+export function EditorClient({ code, photo, photos, paperColors, finishEnabled, calibrated, stampChar }: Props) {
   const router = useRouter();
   const original = useMemo(() => ({ w: photo.width, h: photo.height }), [photo.width, photo.height]);
   const [spec, setSpec] = useState<PrintSpec>(() => defaultSpec(original));
   const [restored, setRestored] = useState(false);
-  const [width, setWidth] = useState(300);
   const [isMobile, setIsMobile] = useState(false);
   const saveT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const specRef = useRef(spec);
@@ -44,25 +55,30 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
   // 還原上次設定
   useEffect(() => {
     const saved = store.spec(code, photo.frameNo);
-    if (saved) { setSpec(saved); setRestored(true); }
+    if (saved) { setSpec({ captionFont: "hand", ...saved }); setRestored(true); }
   }, [code, photo.frameNo]);
 
-  // 相紙寬度：桌機 300/360，手機依視窗
   useEffect(() => {
-    const calc = () => {
-      const m = innerWidth < 640;
-      setIsMobile(m);
-      const land = specRef.current.orientation === "landscape";
-      if (m) {
-        const budget = innerHeight * 0.44 - 48; // 舞台 44vh 扣掉內距
-        setWidth(Math.max(120, Math.min(innerWidth - 72, land ? budget * 1.48 : budget / 1.48, 320)));
-      }
-      else setWidth(land ? 380 : 300);
-    };
-    calc();
-    addEventListener("resize", calc);
-    return () => removeEventListener("resize", calc);
-  }, [spec.orientation]);
+    const mq = matchMedia("(max-width: 639px)");
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // 文字壓在照片上時，依底色亮度決定墨色（防抖，結果存進 spec）
+  const inkKey = `${spec.caption ? 1 : 0}|${captionPlace(spec)}|${spec.frame}|${spec.orientation}|${spec.tone}|${spec.captionSizeMm}|${spec.captionRotate}|${spec.captionFont}|${spec.crop.x.toFixed(3)},${spec.crop.y.toFixed(3)},${spec.crop.w.toFixed(3)}|${spec.captionPos?.x.toFixed(3)},${spec.captionPos?.y.toFixed(2)}`;
+  useEffect(() => {
+    if (!spec.caption || captionPlace(spec) !== "photo") return;
+    let alive = true;
+    const t = setTimeout(async () => {
+      const ink = await autoCaptionInk(photo.sizes["480"] ?? photo.src, original, spec);
+      if (!alive) return;
+      setSpec((s) => (s.captionInk === ink ? s : { ...s, captionInk: ink }));
+    }, 120);
+    return () => { alive = false; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inkKey]);
 
   const save = (s: PrintSpec, quiet = false) => {
     store.setSpec(code, photo.frameNo, s);
@@ -75,6 +91,9 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
       const next = { ...prev, ...patch };
       if (patch.orientation !== undefined || patch.frame !== undefined) {
         next.crop = recropForArea(original, prev.crop, next.orientation, next.frame);
+      }
+      if (patch.orientation !== undefined || patch.frame !== undefined) {
+        next.captionPos = captionDefaultPos(next); // 換框或方向時回到該框的預設位置
       }
       if (next.frame !== "polaroid") next.caption = next.caption; // 保留文字，只是不顯示
       save(next);
@@ -93,7 +112,9 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
     router.push(`/a/${code}/f/${photo.frameNo}/confirm`);
   };
 
-  const printed = store.printed(code).map((e) => e.frame);
+  // 已印過的格要在 mount 後才讀 localStorage，避免 SSR 與 client 不一致
+  const [printed, setPrinted] = useState<string[]>([]);
+  useEffect(() => { setPrinted(store.printed(code).map((e) => e.frame)); }, [code]);
 
   return (
     <>
@@ -104,17 +125,22 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
               src={photo.sizes["1440"] ?? photo.src}
               original={original}
               spec={spec}
-              width={width}
+              className={`slot ${spec.orientation}`}
               paperColors={paperColors}
               showSafe
               showMarks={!isMobile}
               interactive
               shadow={isMobile ? "sm" : "default"}
               captionAnimateLast
+              captionDraggable
+              onCaptionMove={(captionPos) => setSpec((s) => ({ ...s, captionPos }))}
+              onCaptionMoveEnd={() => setSpec((s) => { save(s); return s; })}
+              onCaptionResize={(captionSizeMm) => setSpec((s) => ({ ...s, captionSizeMm }))}
+              onCaptionRotate={(captionRotate) => setSpec((s) => ({ ...s, captionRotate }))}
               onCrop={(crop) => setSpec((s) => ({ ...s, crop }))}
               onCropEnd={() => setSpec((s) => { save(s); return s; })}
             />
-            <div aria-live="polite">
+            <div aria-live="polite" className="proof-hints">
               {level === "warn" && (
                 <div className="alert warn"><b>解析度偏低</b>裁切後約 {eff.w} × {eff.h} px，印出來可能偏軟。<small>建議 1200 × 1800 以上</small></div>
               )}
@@ -172,7 +198,7 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
               </div>
             </div>
           )}
-          {spec.frame === "polaroid" && (
+          {(
             <div className="row">
               <small>一句話</small>
               <div className="line">
@@ -186,16 +212,93 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
                   aria-label="一句話"
                 />
                 <span className="cnt">{spec.caption.length} / {CAPTION.maxChars}</span>
+                {spec.caption && <div className="row-hint">直接拖曳相紙上的字到想要的位置{spec.frame === "polaroid" ? "，拖到照片上也可以" : ""}；點字後可用方向鍵微調。</div>}
+              </div>
+            </div>
+          )}
+          {spec.caption && (
+            <div className="row">
+              <small>字體</small>
+              <div>
+                <div className="seg-q fonts" role="radiogroup" aria-label="一句話的字體">
+                  {CAPTION_FONTS.map((f) => (
+                    <button key={f.key} role="radio" aria-checked={(spec.captionFont ?? "hand") === f.key} onClick={() => update({ captionFont: f.key })} style={{ fontFamily: f.family, letterSpacing: 0 }}>{f.name}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {spec.caption && (
+            <div className="row">
+              <small>顏色</small>
+              <div>
+                <div className="inks" role="radiogroup" aria-label="一句話的顏色">
+                  <button className="ink auto" role="radio" aria-checked={!isHexColor(spec.captionColor)} aria-label="自動" title="自動" onClick={() => update({ captionColor: undefined })} />
+                  {CAPTION_COLORS.map((c) => (
+                    <button key={c.key} className="ink" role="radio" aria-checked={(spec.captionColor ?? "").toLowerCase() === c.hex.toLowerCase()} aria-label={c.name} title={c.name} style={{ background: c.hex }} onClick={() => update({ captionColor: c.hex })} />
+                  ))}
+                  {(() => {
+                    const custom = isHexColor(spec.captionColor) && !CAPTION_COLORS.some((c) => c.hex.toLowerCase() === spec.captionColor!.toLowerCase());
+                    return (
+                      <label className={`ink custom${custom ? " set" : ""}`} role="radio" aria-checked={custom} aria-label="自訂顏色" title="自訂顏色" style={custom ? ({ "--sw": spec.captionColor } as CSSProperties) : undefined}>
+                        <input type="color" id="capColor" value={custom ? spec.captionColor! : "#C4302B"} onChange={(e) => update({ captionColor: e.target.value })} aria-label="自訂顏色" />
+                      </label>
+                    );
+                  })()}
+                  <span className="lb">{isHexColor(spec.captionColor) ? (CAPTION_COLORS.find((c) => c.hex.toLowerCase() === spec.captionColor!.toLowerCase())?.name ?? spec.captionColor!.toUpperCase()) : "自動"}</span>
+                </div>
+                <div className="row-hint">{isHexColor(spec.captionColor) ? "固定用這個顏色；壓在照片上時仍會加一層柔影。" : "自動：相紙下方用墨色，壓在照片上時依底色亮度選淺或深。"}</div>
+              </div>
+            </div>
+          )}
+          {spec.caption && (
+            <div className="row">
+              <small>大小</small>
+              <div className="sizer">
+                <input
+                  type="range"
+                  id="capSize"
+                  min={CAPTION_SIZE.min}
+                  max={captionMaxSizeMm(spec)}
+                  step={0.1}
+                  value={Math.min(captionMaxSizeMm(spec), spec.captionSizeMm ?? CAPTION_SIZE.default)}
+                  onChange={(e) => update({ captionSizeMm: Number(e.target.value) })}
+                  aria-label="一句話的字高"
+                />
+                <span className="mono">{captionSizeMm(spec).toFixed(1)} mm</span>
+                <div className="row-hint">{captionMaxSizeMm(spec) < CAPTION_SIZE.max ? `這句話的長度最大放到 ${captionMaxSizeMm(spec).toFixed(1)} mm，想更大就寫短一點。` : ""}{isMobile ? "也可以在相紙上雙指縮放文字。" : "也可以把游標放在字上滾動滾輪，或拖曳字右下角的小點。"}</div>
+              </div>
+            </div>
+          )}
+          {spec.caption && (
+            <div className="row">
+              <small>旋轉</small>
+              <div className="sizer">
+                <input
+                  type="range"
+                  id="capRotate"
+                  min={CAPTION_ROTATE.min}
+                  max={CAPTION_ROTATE.max}
+                  step={1}
+                  value={captionRotate(spec)}
+                  onChange={(e) => update({ captionRotate: Number(e.target.value) })}
+                  aria-label="一句話的旋轉角度"
+                />
+                <span className="mono">{captionRotate(spec)}°{captionRotate(spec) !== 0 && <button className="btn txt" style={{ marginLeft: 12, fontSize: 11 }} onClick={() => update({ captionRotate: 0 })}>歸零</button>}</span>
+                <div className="row-hint">{isMobile ? "整圈都可以轉；也可以在相紙上雙指扭轉文字。" : "整圈都可以轉；也可以拖曳字上方的小把手。"}</div>
               </div>
             </div>
           )}
           {finishEnabled && (
             <div className="row">
               <small>表面</small>
-              <div className="seg-q" role="radiogroup" aria-label="表面">
-                {(["glossy", "matte"] as const).map((v) => (
-                  <button key={v} role="radio" aria-checked={spec.finish === v} onClick={() => update({ finish: v })}>{v === "glossy" ? "光面" : "霧面"}</button>
-                ))}
+              <div>
+                <div className="seg-q" role="radiogroup" aria-label="表面">
+                  {(["glossy", "matte"] as const).map((v) => (
+                    <button key={v} role="radio" aria-checked={spec.finish === v} onClick={() => update({ finish: v })}>{v === "glossy" ? "光面" : "霧面"}</button>
+                  ))}
+                </div>
+                <div className="row-hint">{spec.finish === "glossy" ? "亮面相紙：顏色鮮、對比高，會反光，有指紋痕。" : "霧面相紙：不反光、顏色柔和，摸起來像舊照片。"}</div>
               </div>
             </div>
           )}
@@ -218,6 +321,7 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
             currentId={photo.id}
             printedIds={photos.filter((p) => printed.includes(p.frameNo)).map((p) => p.id)}
             ariaLabel="換一張"
+            stampChar={stampChar}
           />
         </div>
       )}

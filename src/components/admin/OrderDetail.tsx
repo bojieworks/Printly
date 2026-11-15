@@ -8,7 +8,7 @@ import { toast } from "@/components/Toast";
 import { STATUS_NAME, fmtTime, frameLabel } from "@/components/admin/OrdersClient";
 import { api } from "@/lib/client-store";
 import type { Order } from "@/lib/db/schema";
-import { FINISH_NAME, ORIENTATION_NAME, TONE_NAME, outputSize } from "@/lib/print-spec";
+import { FINISH_NAME, ORIENTATION_NAME, TONE_NAME, captionColorName, captionFont, captionPlace, captionRotate, captionSizeMm, isHexColor, outputSize } from "@/lib/print-spec";
 import type { PhotoView } from "@/lib/queries";
 
 export function OrderDetail({ order, photo, album, paperColors }: { order: Order; photo: PhotoView; album: { id: string; title: string }; paperColors: Record<string, string> | null }) {
@@ -18,7 +18,6 @@ export function OrderDetail({ order, photo, album, paperColors }: { order: Order
   const [del, setDel] = useState(false);
   const out = outputSize(o.spec.orientation);
   const low = Math.min(o.effectiveW, o.effectiveH) < 1200;
-  const w = o.spec.orientation === "landscape" ? 340 : 260;
 
   const setStatus = async (status: Order["status"]) => {
     setBusy(status);
@@ -48,7 +47,7 @@ export function OrderDetail({ order, photo, album, paperColors }: { order: Order
       </div>
       <div className="detail2">
         <div>
-          <Proof src={photo.sizes["1440"] ?? photo.src} original={{ w: photo.width, h: photo.height }} spec={o.spec} width={w} paperColors={paperColors} />
+          <Proof src={photo.sizes["1440"] ?? photo.src} original={{ w: photo.width, h: photo.height }} spec={o.spec} className={`slot ${o.spec.orientation}`} paperColors={paperColors} />
           <div className="mono-sm" style={{ marginTop: 12 }}>與訪客看到的相紙相同</div>
         </div>
         <div style={{ display: "grid", gap: "var(--s6)" }}>
@@ -57,7 +56,7 @@ export function OrderDetail({ order, photo, album, paperColors }: { order: Order
             <div className="r"><small>方向</small><b>{ORIENTATION_NAME[o.spec.orientation]}</b></div>
             <div className="r"><small>色調</small><b>{TONE_NAME[o.spec.tone]}</b></div>
             <div className="r"><small>框</small><b>{frameLabel(o.spec)}</b></div>
-            <div className="r"><small>一句話</small><b>{o.spec.caption ? <span className="hand">{o.spec.caption}</span> : <span className="muted">（留白）</span>}</b></div>
+            <div className="r"><small>一句話</small><b>{o.spec.caption ? <><span style={{ fontFamily: captionFont(o.spec.captionFont).family }}>{o.spec.caption}</span><span className="muted" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>{captionFont(o.spec.captionFont).name} · {captionSizeMm(o.spec).toFixed(1)} mm · {captionPlace(o.spec) === "photo" ? "照片上" : "相紙下方"}{isHexColor(o.spec.captionColor) ? ` · ${captionColorName(o.spec.captionColor)}` : o.spec.captionInk ? ` · ${o.spec.captionInk === "light" ? "淺墨" : "深墨"}` : ""}{captionRotate(o.spec) ? ` · ${captionRotate(o.spec)}°` : ""}</span></> : <span className="muted">（留白）</span>}</b></div>
             <div className="r"><small>表面</small><b>{FINISH_NAME[o.spec.finish]}</b></div>
             <div className="r"><small>數量</small><b>1 張</b></div>
             <div className="r m"><small>裁切</small><b>x {o.spec.crop.x.toFixed(3)} · y {o.spec.crop.y.toFixed(3)} · w {o.spec.crop.w.toFixed(3)} · h {o.spec.crop.h.toFixed(3)}</b></div>

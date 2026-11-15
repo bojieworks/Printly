@@ -94,19 +94,97 @@ test.describe("訪客流程", () => {
     // 色調
     await page.getByRole("radio", { name: "黑白" }).click();
     await expect(page.locator(".proof .area")).toHaveClass(/bw/);
-    // 框：無 → 紙色與一句話消失
+    // 框：無 → 紙色消失；一句話仍可寫，會壓在照片上
     await page.getByRole("radio", { name: "無" }).click();
     await expect(page.locator(".dots")).toHaveCount(0);
-    await expect(page.locator("#caption")).toHaveCount(0);
-    // 框：細框 → 紙色在、一句話不在
+    await page.locator("#caption").fill("壓在照片上");
+    await expect(page.locator(".proof .hand.on-photo")).toContainText("壓在照片上");
+    // 框：細框 → 紙色在、文字仍在照片上
     await page.getByRole("radio", { name: "細框" }).click();
     await expect(page.locator(".dots")).toBeVisible();
-    await expect(page.locator("#caption")).toHaveCount(0);
-    // 框：拍立得 → 一句話
+    await expect(page.locator(".proof .hand.on-photo")).toBeVisible();
+    // 框：拍立得 → 一句話預設回到相紙下方；往上拖到照片上會變成壓在照片上的樣式
     await page.getByRole("radio", { name: "拍立得" }).click();
     await page.locator("#caption").fill("民宿的窗，想留著");
     await expect(page.locator(".proof .hand")).toContainText("民宿的窗，想留著");
+    await expect(page.locator(".proof .hand.on-photo")).toHaveCount(0);
     await expect(page.locator(".line .cnt")).toContainText("8 / 30");
+    {
+      const hb0 = (await page.locator(".proof .hand").boundingBox())!;
+      await page.mouse.move(hb0.x + hb0.width / 2, hb0.y + hb0.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(hb0.x + hb0.width / 2, hb0.y + hb0.height / 2 - 120, { steps: 8 });
+      await page.mouse.up();
+      await expect(page.locator(".proof .hand.on-photo")).toBeVisible();
+      // 拖回下帶
+      const hb1 = (await page.locator(".proof .hand").boundingBox())!;
+      await page.mouse.move(hb1.x + hb1.width / 2, hb1.y + hb1.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(hb1.x + hb1.width / 2, hb1.y + hb1.height / 2 + 120, { steps: 8 });
+      await page.mouse.up();
+      await expect(page.locator(".proof .hand.on-photo")).toHaveCount(0);
+    }
+    // 一句話可以拖曳移動
+    const hand = page.locator(".proof .hand");
+    const hb = (await hand.boundingBox())!;
+    const posBefore = await hand.evaluate((el) => (el as HTMLElement).style.left);
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width / 2 - 40, hb.y + hb.height / 2 - 6, { steps: 5 });
+    await page.mouse.up();
+    expect(await hand.evaluate((el) => (el as HTMLElement).style.left)).not.toBe(posBefore);
+    // 大小：滑桿連續調整；桌機在字上滾滾輪也會變
+    const fs0 = await hand.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await page.locator("#capSize").fill("6");
+    const fs1 = await hand.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(fs1).toBeGreaterThan(fs0 * 1.5);
+    if (info.project.name.startsWith("desktop")) { // 觸控版 WebKit 不支援滑鼠滾輪
+      const hb2 = (await hand.boundingBox())!;
+      await page.mouse.move(hb2.x + hb2.width / 2, hb2.y + hb2.height / 2);
+      await page.mouse.wheel(0, 300);
+      await page.waitForTimeout(100);
+      const fs2 = await hand.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(fs2).toBeLessThan(fs1);
+    }
+    await page.locator("#capSize").fill("3.2");
+    // 旋轉：滑桿改角度，相紙上的字跟著轉；歸零
+    await page.locator("#capRotate").fill("20");
+    expect(await hand.evaluate((el) => (el as HTMLElement).style.transform)).toContain("rotate(20deg)");
+    await page.locator("#capRotate").fill("180");
+    expect(await hand.evaluate((el) => (el as HTMLElement).style.transform)).toContain("rotate(180deg)");
+    await page.locator("#capRotate").fill("-135");
+    expect(await hand.evaluate((el) => (el as HTMLElement).style.transform)).toContain("rotate(-135deg)");
+    await page.getByRole("button", { name: "歸零" }).click();
+    expect(await hand.evaluate((el) => (el as HTMLElement).style.transform)).toContain("rotate(0deg)");
+    // 顏色：色票 → 相紙上的字變色；自動 → 回到墨色
+    await page.getByRole("radio", { name: "朱砂" }).click();
+    expect(await hand.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(196, 48, 43)");
+    await page.getByRole("radio", { name: "自動" }).click();
+    expect(await hand.evaluate((el) => getComputedStyle(el).color)).not.toBe("rgb(196, 48, 43)");
+    // 邊界：往四個方向拖到底，文字框離紙邊都至少 7.5 mm（安全區 8 mm，量測含字框誤差）
+    for (const [dx, dy] of [[-900, 0], [900, 0], [0, -900], [0, 900]]) {
+      const b0 = (await hand.boundingBox())!;
+      await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(b0.x + b0.width / 2 + dx, b0.y + b0.height / 2 + dy, { steps: 8 });
+      await page.mouse.up();
+      const d = await page.evaluate(() => {
+        const paper = document.querySelector(".proof")!.getBoundingClientRect();
+        const el = document.querySelector(".proof .hand")!;
+        // 只量文字節點，不含縮放用的小點
+        let t: DOMRect | null = null;
+        for (const n of [...el.childNodes]) {
+          if (n.nodeType !== Node.TEXT_NODE && !(n as HTMLElement).classList?.contains("last")) continue;
+          const r = document.createRange(); r.selectNodeContents(n); const b = r.getBoundingClientRect();
+          if (!b.width) continue;
+          t = t ? new DOMRect(Math.min(t.left, b.left), Math.min(t.top, b.top), Math.max(t.right, b.right) - Math.min(t.left, b.left), Math.max(t.bottom, b.bottom) - Math.min(t.top, b.top)) : b;
+        }
+        t = t!;
+        const mm = paper.width / (paper.width > paper.height ? 148 : 100);
+        return [(t.left - paper.left) / mm, (paper.right - t.right) / mm, (t.top - paper.top) / mm, (paper.bottom - t.bottom) / mm];
+      });
+      for (const v of d) expect(v).toBeGreaterThanOrEqual(7.5);
+    }
     // 紙色：米白
     await page.getByRole("radio", { name: "米白" }).click();
     const bg = await proof.evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -177,9 +255,9 @@ test.describe("訪客流程", () => {
     // 詳情頁標示已印過（桌機顯示文字；手機隱藏文字但底片有圈）
     await page.goto(`/a/${st.code}/f/${st.frames[1]}`);
     if (!isMobile(page)) await expect(page.getByText("印過這張")).toBeVisible();
-    await expect(page.locator(".film .fr.sel")).toHaveCount(1);
+    await expect(page.locator(".film .fr.printed")).toHaveCount(1);
     await page.goto(`/a/${st.code}`);
-    await expect(page.locator(".film .fr.sel")).toHaveCount(1);
+    await expect(page.locator(".film .fr.printed")).toHaveCount(1);
     await shot(page, info.project.name, "13-album-after-order");
   });
 

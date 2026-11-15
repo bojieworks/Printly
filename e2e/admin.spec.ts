@@ -84,7 +84,8 @@ test.describe("管理端", () => {
     await page.goto("/admin/orders");
     await expect(page.locator(".tbl")).toContainText(shortCode);
     await shot(page, info.project.name, "24-orders");
-    const row = page.locator(".tbl tbody tr", { hasText: shortCode });
+    // 以短碼儲存格精確比對，避免相鄰儲存格文字串接造成誤判
+    const row = page.locator(".tbl tbody tr").filter({ has: page.getByText(shortCode, { exact: true }) });
     await row.click();
     await page.waitForURL(/\/admin\/orders\/[^/]+$/);
     await expect(page.getByRole("heading", { name: shortCode })).toBeVisible();
@@ -101,7 +102,7 @@ test.describe("管理端", () => {
     const body = await png.body();
     expect(body.length).toBeGreaterThan(20_000);
     expect(body.subarray(16, 24).readUInt32BE(0)).toBe(1200);
-    expect(body.subarray(16, 24).readUInt32BE(4)).toBe(1800);
+    expect(body.subarray(16, 24).readUInt32BE(4)).toBe(1776);
     await ctx.dispose();
     await page.getByRole("button", { name: "重新產生" }).click();
     await expect(page.locator(".toast")).toContainText("重新產生");
@@ -111,8 +112,10 @@ test.describe("管理端", () => {
     await page.getByRole("button", { name: /標記已交付/ }).click();
     await expect(page.locator(".head .status")).toHaveText("已交付");
     await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500); // router.refresh() 在 WebKit 會晚一點才完成
     await page.goto("/admin/orders?status=delivered");
     await expect(page.locator(".tbl")).toContainText(shortCode);
+    await page.waitForLoadState("networkidle");
     // 批次：退回成已列印後批次標記已交付
     await page.goto("/admin/orders?status=printed");
     const ctx2 = await adminApi();
@@ -120,7 +123,7 @@ test.describe("管理端", () => {
     await ctx2.patch(`/api/admin/orders/${id}`, { data: { status: "printed" } });
     await ctx2.dispose();
     await page.reload();
-    await page.locator(".tbl tbody tr", { hasText: shortCode }).locator("label.chk").click();
+    await page.locator(".tbl tbody tr").filter({ has: page.getByText(shortCode, { exact: true }) }).locator("label.chk").click();
     await expect(page.locator(".batch")).toContainText("已選 1 筆");
     await page.getByRole("button", { name: "標記已交付" }).click();
     await expect(page.locator(".toast")).toContainText("已交付");

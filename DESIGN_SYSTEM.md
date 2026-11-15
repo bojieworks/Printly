@@ -1,6 +1,6 @@
 # Jay's Print Room — Design System
 
-版本 1.1 · 2026-11-14（原型回饋後更新 3.7、3.10）
+版本 1.9 · 2026-11-15（一句話整圈旋轉、旋轉游標、文字顏色、字高上限 14 mm、齒孔打穿）
 狀態：已確認，為後續開發的唯一設計依據。
 
 本文件記錄數值與規格。判斷與理由在 Art Direction（Phase 4）；結構與流程在 UX Architecture（Phase 5）。
@@ -248,7 +248,7 @@
 
 ```js
 export const PAPER = { w: 100, h: 148 };              // mm
-export const OUTPUT_PX = { w: 1200, h: 1800 };        // 輸出檔像素（4×6 in @300dpi）
+export const OUTPUT_PX = { w: 1200, h: 1776 };        // 輸出檔像素：100×148 mm × 12 px/mm，長寬同比例
 export const PX_PER_MM = OUTPUT_PX.w / PAPER.w;       // 12
 export const BLEED_DEFAULT = { top: 3, right: 3, bottom: 3, left: 3 }; // mm，校正後以 Settings.calibration 覆寫
 export const SAFE_INSET = 8;                           // mm，文字與重要內容離紙邊的最小距離
@@ -257,7 +257,16 @@ export const FRAME = {
   thin:     { top: 6, right: 6, bottom: 6, left: 6 },
   polaroid: { top: 6, right: 6, bottom: 22, left: 6 },
 };
-export const CAPTION = { fontSizeMm: 3.2, baselineFromBottomMm: 9, maxChars: 30 }; // 只在 polaroid
+export const CAPTION = { baselineFromBottomMm: 9, maxChars: 30 }; // 預設位置與字數
+export const CAPTION_SIZE = { min: 2, max: 9, default: 3.2 }; // 字高 mm，連續
+export const SAFE = 8;                                       // 文字框離紙邊的最小距離，四邊相同
+// 一句話的字體（PrintSpec.captionFont）。web 用 Google Fonts，列印用 assets/fonts 同名檔；等寬字體的中文退回楷體。
+export const CAPTION_FONTS = [
+  { key: "hand",  name: "手寫", file: "LXGWWenKaiTC-Regular.ttf", sizeMul: 1,    letterSpacing: "0" },
+  { key: "serif", name: "宋體", file: "NotoSerifTC-Regular.otf",  sizeMul: 0.92, letterSpacing: "0.04em" },
+  { key: "sans",  name: "黑體", file: "NotoSansTC-Regular.otf",   sizeMul: 0.9,  letterSpacing: "0.06em" },
+  { key: "mono",  name: "打字", file: "IBMPlexMono-Regular.ttf",  sizeMul: 0.85, letterSpacing: "0.1em" },
+];
 export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有效像素門檻（短邊, 長邊）
 ```
 
@@ -275,7 +284,7 @@ export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有�
 
 1. 紙色填滿整張。
 2. 依框算出照片區域，放入裁切後的照片（tone 套用於此）。
-3. 拍立得時在下帶寫入一句話：`--f-hand`，置中，字高 3.2 mm，基線距底 9 mm，超過寬度縮小至 2.6 mm 後截斷。
+3. 拍立得時在下帶寫入一句話：依 `captionFont` 選字體（預設手寫），置中，字高 3.2 mm × sizeMul，基線距底 9 mm，超過寬度縮小 0.81 倍後截斷。
 4. 編輯器額外疊安全區虛線（內縮 3%）與裁切標記；確認頁、成功頁、管理端不疊。
 
 ### 2.4 紙色（列印內容，可在管理端設定）
@@ -292,7 +301,7 @@ export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有�
 
 ### 2.5 輸出檔
 
-- 格式 PNG，1200 × 1800（直式）或 1800 × 1200（橫式），sRGB，寫入 300 dpi 的 pHYs。
+- 格式 PNG，1200 × 1776（直式）或 1776 × 1200（橫式），即 100 × 148 mm × 12 px/mm，sRGB，寫入 300 dpi 的 pHYs。不是 1200 × 1800：4×6 吋與 100×148 mm 比例不同，長寬必須用同一個倍率，框與文字的幾何才會和預覽一致。
 - 原檔先套 Exif 方向，Display P3 或其他 ICC 轉換到 sRGB（不是移除）。
 - 縮放用 Lanczos。黑白用亮度加權（Rec. 709）。
 - 一句話用與網頁相同的字體檔繪製。
@@ -378,12 +387,15 @@ export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有�
 - 兩段 18 × 2 的線，當前 ink、其餘 rule-2；左右兩個 `mono-sm` 字（調整、確認）。
 
 **FilmStrip**
-- 底 film、上下內距 14（窄 9）、齒孔見 1.7。橫向捲動、`scroll-snap-type: x mandatory`、隱藏捲軸、鍵盤左右。
-- 完整：格寬 112、間距 6；格內 Photo 3:2 + 一行 `mono-sm`（格號左、方向右）。
-- 窄：格寬 64、高 44、無文字、固定底部（z-film）。
-- 格狀態：`cur` 外框 1px amber（offset 2）+ 格號 amber；`sel` 內縮 4px 的朱紅 2px 手繪圈（`border-radius: 50% 46% 52% 48% / 54% 48% 50% 46%; transform: rotate(-4deg)`）；兩者可同時存在。hover 同 cur。
-- 版位：底片屬於內容欄，左緣與上下區塊對齊，不出血。寬度 `fit-content`，有多少格就多長，最後一格後留 32px 的底片尾；超過內容寬度才橫向捲動。固定底部的窄底片同樣對齊內容欄左緣。
-- 攤開：從門口或書架進入相簿時，底片軌道從右側 28px 滑入並淡入（t-lift、e-out），同時頁面平滑捲動到引導行（「翻開了。點一張你想印的」）。只在進入時發生一次，重新整理不重播；減少動態時直接跳到位置。
+- 底 film、上下內距 18（窄 11）、齒孔為橫長的圓角矩形 SVG 圖樣（17×8、間距 36；窄 11×5、間距 24），上下各一排，孔與孔之間留約一個孔寬的片基，疏朗但每個孔要有長度。齒孔是「打穿」的：填暗一階的紙色 #B5AD9F（不用亮白，免得搶過照片）、孔緣一圈 55% 黑、孔頂一條 #8F8779 的細影，像沖壓出來露出底下的紙；不再用只比片基亮一點的暗褐色。片基有極淡的上亮下暗內陰影。
+- 每一格保留照片原比例：格高固定（完整 72、窄 44），格寬隨比例；不裁切。直式格只顯示格號，不顯示比例。
+- 橫向捲動、`scroll-snap-type: x proximity`、隱藏捲軸、鍵盤左右、Home / End。軌道上下各留 4px 內距（片基內距相應減 4），格子的 hover / 目前格外框（offset 2 + 1px）才不會被軌道的 overflow 切掉上緣。
+- 格狀態：`cur` 外框 1px amber（offset 2）+ 格號 amber 與短底線；`printed`（不叫 sel，避免與下拉選單的 `.sel` 樣式撞名）在格的右下角蓋一個 22px（窄 16px）的小圓印，字同成功頁的印章，微微歪斜，縮圖略降飽和；兩者可同時存在。hover 同 cur。不再用朱紅圈。
+- 版位：屬於內容欄，左緣與上下區塊對齊，不出血。寬度 `fit-content`，有多少格就多長，最後一格後留 32px 底片尾；超過內容寬度才橫向捲動。固定底部的窄底片同樣對齊內容欄左緣。
+- 攤開：從門口或書架進入相簿時，底片軌道從右側 28px 滑入並淡入（t-lift、e-out），同時頁面平滑捲動到引導行。只在進入時發生一次，重新整理不重播；減少動態時直接跳到位置。
+- 攤開：每次進入相簿總覽都播放：整條從右側滑入，各格再以 28 ms 間隔依序跟上，像底片被拉出來。
+- 拉出（drift）：只在相簿總覽的完整底片，且溢出時才啟用。進入 0.9 秒後以 28 px/s 向右緩慢捲動；到尾端停止；滑鼠停在上面時暫停；任何觸碰、滾輪、鍵盤、焦點或使用者捲動都永久停止；減少動態時不啟用。拉出期間關閉 scroll-snap，停止後恢復。
+- 目前格不是連結（點了不會有事），以琥珀外框與格號底線標示；縮圖立即載入，避免瀏覽器的佔位圖示。
 - 紀律：全站同時最多一條。首頁不放；相簿總覽與桌機編輯器放完整；翻頁與詳情放窄。相簿少於 2 張時詳情頁不顯示窄底片。
 
 ### 3.8 Photo（基礎）
@@ -441,6 +453,21 @@ export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有�
 - `grid-template-columns: 84px 1fr`，內距 14 20，底線 rule。左 `label` pencil，右控制項。
 - 順序固定：方向、色調、框、紙色、一句話、表面。框為「無」時隱藏紙色與一句話；「細框」時隱藏一句話。
 
+**CaptionFontSelector**
+- 框為「拍立得」時出現在一句話下方：quiet Segmented，四個選項以各自的字體顯示（手寫、宋體、黑體、打字），不加文字說明，字體本身就是說明。預設手寫。
+
+**CaptionPosition（一句話的位置）**
+- 唯一的操作是拖曳：相紙上的字可直接拖到任何允許的位置（hover 或 focus 時出現朱紅虛線外框），點字後方向鍵微調（1% / 0.5 mm，Shift 為 5% / 2 mm）。沒有位置選項列。
+- 位置以 `captionPos { x: 0–1 相紙寬度比例, y: 基線距紙底 mm }` 存入 PrintSpec；預設拍立得在下帶正中 `{0.5, 9}`，無框與細框在照片下緣往上 4 mm 置中。換框或方向時回到該框的預設。
+- 文字落在哪由位置推導：拍立得時基線在照片下緣以下就是「帶」（字高 3.2 mm、紙色對應的墨）；拖過交界就變成「壓在照片上」。無框、細框一律壓在照片上。
+- **大小**：連續值 2–14 mm（× 字體 sizeMul），預設 3.2。上限會依這句話的長度自動縮：整句（估計寬度：全形 1、半形 0.55、空白 0.3 字高，加字距）要放得進安全區的寬度（直式 84 mm、橫式 132 mm），滑桿的最大值與相紙上的縮放都用這個上限，超過時說明文字會告訴使用者「寫短一點」；列印端算出的字高也一樣，所以永遠不會被截斷。直接在相紙上縮放：桌機把游標放在字上滾滾輪，或拖字右下角的小點（hover 或 focus 時出現）；觸控裝置雙指在字上縮放，小點常駐；點字後 + / − 微調 0.2 mm。規格列另有滑桿與 mm 讀數，手機上以滑桿為主。
+- **旋轉**：整圈都可以，角度存成 −180° 到 180°（順時針為正）；接近 0 / ±90 / 180 的 ±3° 吸回正角。桌機拖字上方的小把手（以文字中心為軸），觸控裝置雙指扭轉（與縮放同時），點字後 [ / ] 各轉 2°；規格列有滑桿（−180 到 180）、角度讀數與歸零。列印檔以文字中心為軸旋轉。
+- **旋轉游標**：把手上與拖曳期間用自訂游標（24px 圓弧箭頭，ink 線 1.8 配 paper 白邊 4.2，熱點在中心），拖曳期間套在整個頁面（`body.cap-rotating`），避免指標離開把手時變回箭頭。
+- **顏色**：預設「自動」（下帶用紙色對應的墨，照片上依底色亮度選淺或深）。可改成固定顏色：七個色票（墨黑 #2A2724、紙白 #F4F1EA、鉛筆灰 #7D776C、朱砂 #C4302B、琥珀 #E3A04F、藍墨 #2E4A6B、墨綠 #3F5A47）或自訂（原生色彩選擇器）。色票 26px 圓、rule 框、內側 2px paper 環；選中 ink 框並放大 1.08；自動為墨黑／紙白斜切；自訂為彩色環，選了之後顯示所選色。存入 `captionColor`（#RRGGBB），列印端沿用；固定顏色壓在照片上仍加柔影，柔影深淺依顏色亮度（> 0.4 用深影）。
+- **邊界只有一條規則**：整個文字框離紙的四邊至少 8 mm（安全區），三種框、直橫式、帶內或照片上完全一致；夾的是旋轉後的外框（由未旋轉的字框與角度算出）。縮放或旋轉後位置會重新夾回範圍。
+- 壓在照片上的規則：一行；自動模式的墨色只有淺 #F4F1EA 與深 #2A2724 兩種，由文字底下區域的平均亮度自動選（門檻 0.55），前端算好存進 `captionInk`，列印端沿用；加一層極淡的柔影（28%），不描邊。
+- 照片像素不受影響：文字在輸出解析度以向量合成，原檔不動；重新產生即可換。
+
 **FrameSelector**
 - 三張小相紙 56 寬、比例 100:148、框 rule-2、底 sheet，內部以 #BFB5A4 色塊表示照片區域（none 滿、thin 內縮 6%、polaroid 內縮 6% 6% 22%）。下方 `mono-sm` 名稱。選中：外框 1px ink offset 3。鍵盤左右。
 
@@ -484,8 +511,9 @@ export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] };  // 裁切後有�
 
 ### 3.18 Stamp
 
-- 方印 44 × 44（手機 40），框 2px vermilion，字「傑」`--f-serif` 20px 600 vermilion，`transform: rotate(-7deg)`，opacity .92。
-- `drop` 動效見 4.7。只在成功頁與相簿總覽「已印過」格旁的小版（20px）使用。
+- 手刻的朱文圓印，不是方框加字。SVG 100×100：外框是略有起伏、一側較厚的不正圓（線寬 5），內側一圈細線（1.4，透明度 .5）；字用 `--f-hand` 46px 置中。圓形與底片格上的手繪選取圈是同一種語言。
+- 以 feTurbulence + feDisplacementMap（scale 2.6）讓邊緣不平整；再以細噪點削薄部分不透明度模擬墨色不均；整體 `mix-blend-mode: multiply` 疊在紙上。
+- 尺寸 64（手機 56），`transform: rotate(-6deg)`。`drop` 動效見 4.7。只在成功頁使用；相簿總覽「已印過」用底片格的朱紅圈，不用印章。
 
 ### 3.19 管理端專用
 
@@ -568,6 +596,7 @@ transition 只套在 `color`、`background-color`、`border-color`、`box-shadow
 | 蓋章 | 成功頁進入 | Stamp 從 `scale(1.6)` opacity 0 到 `scale(1)` opacity .92；t-base、e-stamp；一次，不彈跳 |
 | 顯影 | 蓋章之後 | 相紙照片 `filter: brightness(0) contrast(1.5) blur(4px)` → 正常；t-develop、e-out；只在成功頁首次進入 |
 | 對焦 | 進入全螢幕 | 照片 `blur(6px)` opacity .6 → 清晰；t-page、e-out；退出不反向 |
+| 拉出 | 相簿總覽的底片溢出時 | 22 px/s 緩慢捲動到尾端停止；一碰就停；減少動態不啟用。是「攤開」的延續，不算第七個動效 |
 
 規則：
 - 不新增第七個動效。Toast 的上移淡入與骨架流動是狀態，不是動效。
@@ -595,7 +624,7 @@ transition 只套在 `color`、`background-color`、`border-color`、`box-shadow
 
 - 8 欄、邊距 32。
 - 翻頁：橫向時兩欄跨頁，直向時單欄。
-- 編輯器：Proof 在上、SpecRow 在下（單欄），ProofMarks 顯示。完整底片顯示。
+- 編輯器：單欄，Proof 固定在上方（sticky，高 46vh），SpecRow 在下捲動，調整時看得到相紙變化；ProofMarks 隱藏。完整底片顯示。
 - TopBar 不固定。
 
 ### 5.3 Desktop（1024–1439）
@@ -656,7 +685,9 @@ transition 只套在 `color`、`background-color`、`border-color`、`box-shadow
 - 錯誤兩句：發生什麼、怎麼辦。不道歉、不用語助詞。
 - 不出現：購物車、商品、價格、結帳、訂購、優惠、立即、馬上。
 - 用「相簿」「一本」「翻」「格」「相紙」「印」。
-- 數字與單位：100 × 148 mm（乘號 ×、前後空白）、1200 × 1800 px、2026-08-14。
+- 引導行（相簿總覽）：第一行 `sans 16px` ink-2「翻開了。**點一張你想印的。**」，第二行 `sans 13px` pencil「N 張裡挑 1 張，一人一張。」手機上兩行各自一行，不並排。
+- 成功頁預設文案：「印好之後，親手拿給你。」不提印表機型號；相紙尺寸已在確認頁摘要出現過。管理端可改。
+- 數字與單位：100 × 148 mm（乘號 ×、前後空白）、1200 × 1776 px、2026-08-14。
 - 英文副題是另一個角度的註腳，不是翻譯。
 
 ---
@@ -697,7 +728,15 @@ localStorage keys：
 
 所有讀寫包在 try/catch，失敗時功能照常、只是不記住。
 
-### 8.5 檢查清單（開發完成前）
+### 8.5 版面跳動（CLS）
+
+- 相紙元件所有內部尺寸以 container query 單位（cqw）由 mm 換算，寬度由 CSS 的 `.proof.slot.portrait / .landscape` 依頁面與斷點決定；不在 JS 量測，SSR 與 client 一致。
+- 編輯器舞台桌機 `min-height: 680px`、手機固定 `height: 44vh`，改方向或框時舞台不變高；解析度提示在桌機預留 72px 的槽，手機放在規格列第一列。
+- 所有照片都有 `width/height` 或 `aspect-ratio`，底片格以照片比例預先佔位；骨架與內容同尺寸。
+- 字體 `display=swap` 並 preconnect；中文字體的系統替代（PingFang、微軟正黑）字寬相近，切換時行數幾乎不變。
+- 動效只用 transform 與 opacity，不改 layout。Toast、底部動作列、窄底片皆 fixed。
+
+### 8.6 檢查清單（開發完成前）
 
 - [ ] 任何一頁找不到第二個 primary 按鈕
 - [ ] 任何一頁找不到圓角（圓點與選取圈除外）

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Proof } from "@/components/Proof";
 import { api, deviceHint, store } from "@/lib/client-store";
-import { FINISH_NAME, FRAME_NAME, ORIENTATION_NAME, PAPER_COLORS, TONE_NAME, defaultSpec, type PrintSpec } from "@/lib/print-spec";
+import { FINISH_NAME, FRAME_NAME, ORIENTATION_NAME, PAPER_COLORS, TONE_NAME, captionColorName, captionFont, captionPlace, captionRotate, captionSizeMm, defaultSpec, isHexColor, type PrintSpec } from "@/lib/print-spec";
 import type { PhotoView } from "@/lib/queries";
 
 export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { code: string; photo: PhotoView; paperColors: Record<string, string> | null; finishEnabled: boolean }) {
@@ -18,7 +18,6 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
   const [err, setErr] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [printedBefore, setPrintedBefore] = useState<string | null>(null);
-  const [width, setWidth] = useState(220);
 
   useEffect(() => {
     const s = store.spec(code, photo.frameNo);
@@ -26,14 +25,11 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
     setName(store.guestName());
     const me = store.printed(code).find((e) => e.frame === photo.frameNo);
     setPrintedBefore(me ? me.at.slice(5, 10).replace("-", "/") : null);
-    const calc = () => setWidth(innerWidth < 640 ? 180 : 220);
-    calc();
-    addEventListener("resize", calc);
     const on = () => setOffline(!navigator.onLine);
     on();
     addEventListener("online", on);
     addEventListener("offline", on);
-    return () => { removeEventListener("resize", calc); removeEventListener("online", on); removeEventListener("offline", on); };
+    return () => { removeEventListener("online", on); removeEventListener("offline", on); };
   }, [code, photo.frameNo, original]);
 
   const submit = async () => {
@@ -55,15 +51,14 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
     }
   };
 
-  if (!spec) return <div className="confirm"><div className="skel" style={{ width: 220, aspectRatio: "100/148" }} /><div /></div>;
+  if (!spec) return <div className="confirm"><div className="skel slot portrait" style={{ aspectRatio: "100/148" }} /><div /></div>;
   const paperName = PAPER_COLORS.find((c) => c.key === spec.paper)?.name ?? "";
-  const w = spec.orientation === "landscape" ? width * 1.3 : width;
 
   return (
     <>
       <div className="confirm">
         <div className="proof-wrap">
-          <Proof src={photo.sizes["1440"] ?? photo.src} original={original} spec={spec} width={w} paperColors={paperColors} />
+          <Proof src={photo.sizes["1440"] ?? photo.src} original={original} spec={spec} className={`slot ${spec.orientation}`} paperColors={paperColors} />
         </div>
         <div>
           <h1 className="ttl" style={{ marginBottom: 12 }}>確認這一張</h1>
@@ -73,10 +68,10 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
             <div className="r"><small>尺寸</small><b>100 × 148 mm · {ORIENTATION_NAME[spec.orientation]}</b></div>
             <div className="r"><small>色調</small><b>{TONE_NAME[spec.tone]}</b></div>
             <div className="r"><small>框</small><b>{spec.frame === "none" ? "無" : `${FRAME_NAME[spec.frame]} · ${paperName}`}</b></div>
-            {spec.frame === "polaroid" && (
-              <div className="r"><small>一句話</small><b>{spec.caption ? <span className="cap" style={{ color: "var(--ink)" }}>{spec.caption}</span> : <span className="muted">（留白）</span>}</b></div>
+            {(spec.frame === "polaroid" || spec.caption) && (
+              <div className="r"><small>一句話</small><b>{spec.caption ? <><span style={{ color: "var(--ink)", fontFamily: captionFont(spec.captionFont).family, letterSpacing: captionFont(spec.captionFont).letterSpacing }}>{spec.caption}</span><span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>{captionFont(spec.captionFont).name} · {captionSizeMm(spec).toFixed(1)} mm · {captionPlace(spec) === "photo" ? "照片上" : "相紙下方"}{isHexColor(spec.captionColor) ? ` · ${captionColorName(spec.captionColor)}` : ""}{captionRotate(spec) ? ` · ${captionRotate(spec)}°` : ""}</span></> : <span className="muted">（留白）</span>}</b></div>
             )}
-            {finishEnabled && <div className="r"><small>表面</small><b>{FINISH_NAME[spec.finish]}</b></div>}
+            {finishEnabled && <div className="r"><small>表面</small><b>{FINISH_NAME[spec.finish]}<span className="muted" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>{spec.finish === "glossy" ? "亮、會反光" : "不反光、柔和"}</span></b></div>}
             <div className="r"><small>數量</small><b>1 張</b></div>
           </div>
           <div className="who">

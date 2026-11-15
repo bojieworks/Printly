@@ -4,7 +4,17 @@ import { Resvg } from "@resvg/resvg-js";
 import {
   CAPTION,
   PX_PER_MM,
+  CAPTION_ON_PHOTO,
+  captionFont,
   captionInk,
+  captionInkHex,
+  hexLuminance,
+  isHexColor,
+  captionPlace,
+  captionPos,
+  captionRotate,
+  captionSizeMm,
+  captionXBounds,
   outputSize,
   paperHex,
   paperSize,
@@ -12,7 +22,8 @@ import {
   type PrintSpec,
 } from "@/lib/print-spec";
 
-const FONT_PATH = path.resolve(process.cwd(), "assets/fonts/LXGWWenKaiTC-Regular.ttf");
+const FONT_DIR = path.resolve(process.cwd(), "assets/fonts");
+const FALLBACK_FONT = path.join(FONT_DIR, "LXGWWenKaiTC-Regular.ttf");
 
 export interface RenderOptions {
   paperColors?: Record<string, string> | null;
@@ -28,7 +39,7 @@ export async function renderPrint(work: Buffer, original: { w: number; h: number
   const out = outputSize(spec.orientation);
   const paper = paperSize(spec.orientation);
   const area = photoArea(spec.orientation, spec.frame);
-  const mm = out.w / paper.w; // = PX_PER_MM，但以輸出尺寸為準
+  const mm = PX_PER_MM; // 長寬同一個比例
 
   const areaPx = {
     left: Math.round(area.x * mm),
@@ -53,14 +64,31 @@ export async function renderPrint(work: Buffer, original: { w: number; h: number
 
   const composites: OverlayOptions[] = [{ input: photoBuf, left: areaPx.left, top: areaPx.top }];
 
-  if (spec.frame === "polaroid" && spec.caption.trim()) {
+  if (spec.caption.trim()) {
+    const font = captionFont(spec.captionFont);
+    const place = captionPlace(spec);
+    const pos = captionPos(spec);
+    const xb = captionXBounds(spec);
+    const sizeMm = captionSizeMm(spec);
+    let ink: string = captionInk(spec.paper);
+    if (place === "photo") {
+      ink = captionInkHex(spec.captionInk ?? (await autoInk(photoBuf, areaPx, out, pos, mm, sizeMm)));
+    }
+    if (isHexColor(spec.captionColor)) ink = spec.captionColor; // 使用者指定的顏色優先
     const capPng = await renderCaption(spec.caption.trim(), {
       widthPx: out.w,
-      bandLeftPx: areaPx.left,
-      bandWidthPx: areaPx.width,
-      fontPx: CAPTION.fontSizeMm * mm,
-      baselinePx: out.h - CAPTION.baselineFromBottomMm * mm,
-      color: captionInk(spec.paper),
+      bandLeftPx: xb.min * out.w,
+      bandWidthPx: (xb.max - xb.min) * out.w,
+      centerX: pos.x,
+      fontPx: sizeMm * mm,
+      baselinePx: out.h - pos.y * mm,
+      color: ink,
+      shadow: place === "photo",
+      rotate: captionRotate(spec),
+      heightPx: out.h,
+      fontFile: path.join(FONT_DIR, font.file),
+      family: font.family.split(",")[0].replace(/['"]/g, "").trim(),
+      letterSpacingEm: parseFloat(font.letterSpacing) || 0,
     });
     composites.push({ input: capPng, left: 0, top: 0 });
   }
@@ -76,30 +104,61 @@ export async function renderPrint(work: Buffer, original: { w: number; h: number
   return png;
 }
 
-async function renderCaption(text: string, o: { widthPx: number; bandLeftPx: number; bandWidthPx: number; fontPx: number; baselinePx: number; color: string }) {
+async function renderCaption(text: string, o: { widthPx: number; bandLeftPx: number; bandWidthPx: number; centerX: number; fontPx: number; baselinePx: number; color: string; fontFile: string; family: string; letterSpacingEm: number; shadow?: boolean; rotate?: number; heightPx?: number }) {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   // 單行；過長時縮小字級到 2.6 mm（約 0.81 倍），再超過就截斷
   let fontPx = o.fontPx;
   let content = text;
-  const measure = (t: string, f: number) => t.length * f * 0.98; // 楷體方塊字近似，英文會偏寬估
+  const measure = (t: string, f: number) => t.length * f * (0.98 + o.letterSpacingEm); // 方塊字近似，英文會偏寬估
   if (measure(content, fontPx) > o.bandWidthPx) fontPx = o.fontPx * 0.81;
   while (content.length > 1 && measure(content, fontPx) > o.bandWidthPx) content = content.slice(0, -1);
-  const cx = o.bandLeftPx + o.bandWidthPx / 2;
-  const height = Math.ceil(o.baselinePx + fontPx);
+  // 文字中心依 centerX 放置，但整段文字（旋轉後的外框）要留在帶內
+  const t = ((o.rotate ?? 0) * Math.PI) / 180;
+  const half = (measure(content, fontPx) * Math.abs(Math.cos(t)) + fontPx * Math.abs(Math.sin(t))) / 2;
+  const cx = Math.min(o.widthPx - o.bandLeftPx - half, Math.max(o.bandLeftPx + half, o.centerX * o.widthPx));
+  const height = o.heightPx ?? Math.ceil(o.baselinePx + fontPx);
+  // 以文字中心（基線往上約 0.35 字高）為軸旋轉
+  const rot = o.rotate ? ` transform="rotate(${o.rotate} ${cx} ${o.baselinePx - fontPx * 0.35})"` : "";
+  const textAttrs = `x="${cx}" y="${o.baselinePx}" text-anchor="middle" font-family="${esc(o.family)}, LXGW WenKai TC" font-size="${fontPx}" letter-spacing="${o.letterSpacingEm * fontPx}"${rot}`;
+  // 壓在照片上時加一層極淡的柔影，讓中間調的底也讀得到；不描邊
+  const shadow = o.shadow
+    ? `<defs><filter id="sh" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="${fontPx * 0.06}"/></filter></defs>
+  <g transform="translate(0, ${fontPx * 0.04})"><text ${textAttrs} fill="${hexLuminance(o.color) > 0.4 ? "#000" : "#fff"}" opacity="0.28" filter="url(#sh)">${esc(content)}</text></g>`
+    : "";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${o.widthPx}" height="${height}">
-  <text x="${cx}" y="${o.baselinePx}" text-anchor="middle" font-family="LXGW WenKai TC" font-size="${fontPx}" fill="${o.color}">${esc(content)}</text>
+  ${shadow}
+  <text ${textAttrs} fill="${o.color}">${esc(content)}</text>
 </svg>`;
   const r = new Resvg(svg, {
-    font: { fontFiles: [FONT_PATH], loadSystemFonts: false, defaultFontFamily: "LXGW WenKai TC" },
+    font: { fontFiles: [o.fontFile, FALLBACK_FONT], loadSystemFonts: false, defaultFontFamily: o.family },
     fitTo: { mode: "original" },
   });
   return r.render().asPng();
 }
 
+/** 文字底下那一塊的平均亮度 → 墨色。與前端 lib/caption-ink.ts 用同一個門檻。 */
+async function autoInk(photoPng: Buffer, areaPx: { left: number; top: number; width: number; height: number }, out: { w: number; h: number }, pos: { x: number; y: number }, mm: number, sizeMm: number): Promise<"light" | "dark"> {
+  const fontPx = sizeMm * mm;
+  const cx = pos.x * out.w;
+  const baseline = out.h - pos.y * mm;
+  const box = {
+    left: Math.max(areaPx.left, Math.round(cx - out.w * 0.18)),
+    top: Math.max(areaPx.top, Math.round(baseline - fontPx * 1.1)),
+    right: Math.min(areaPx.left + areaPx.width, Math.round(cx + out.w * 0.18)),
+    bottom: Math.min(areaPx.top + areaPx.height, Math.round(baseline + fontPx * 0.3)),
+  };
+  const w = Math.max(1, box.right - box.left), h = Math.max(1, box.bottom - box.top);
+  const { data } = await sharp(photoPng).extract({ left: box.left - areaPx.left, top: box.top - areaPx.top, width: w, height: h }).resize(16, 8, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 3) sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+  const lum = sum / (data.length / 3);
+  return lum > CAPTION_ON_PHOTO.lumThreshold ? "dark" : "light";
+}
+
 /** 校正圖：四邊 1 mm 刻度與中央說明，印出後量各邊被裁掉的毫米數 */
 export async function renderCalibration() {
   const w = 1200,
-    h = 1800;
+    h = 1776;
   const mm = PX_PER_MM;
   let ticks = "";
   for (let i = 0; i <= 10; i++) {

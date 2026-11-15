@@ -29,7 +29,7 @@ export default async function DetailPage({ params }: Props) {
         right={<span className="mono-sm">{p.width} × {p.height} · {album.date}</span>}
       />
       <main id="main" className="view-in">
-        <DetailClient code={album.code} photos={photos} index={idx} />
+        <DetailClient code={album.code} photos={photos} index={idx} stampChar={st.stampChar} />
       </main>
     </div>
   );

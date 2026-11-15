@@ -4,8 +4,9 @@
  */
 
 export const PAPER = { w: 100, h: 148 } as const; // Canon SELPHY 明信片相紙
-export const OUTPUT_PX = { w: 1200, h: 1800 } as const; // 4×6 in @ 300 dpi，直式
-export const PX_PER_MM = OUTPUT_PX.w / PAPER.w; // 12
+/** 輸出比例固定 12 px/mm（300 dpi），長寬同一個比例，幾何才會與相紙一致：1200 × 1776（直式） */
+export const PX_PER_MM = 12;
+export const OUTPUT_PX = { w: PAPER.w * PX_PER_MM, h: PAPER.h * PX_PER_MM } as const; // 1200 × 1776
 export const BLEED_DEFAULT = { top: 3, right: 3, bottom: 3, left: 3 } as const;
 export const SAFE_INSET = 8; // 文字與重要內容離紙邊的最小距離
 
@@ -22,6 +23,63 @@ export const FRAME: Record<FrameStyle, { top: number; right: number; bottom: num
 };
 
 export const CAPTION = { fontSizeMm: 3.2, baselineFromBottomMm: 9, maxChars: 30 } as const;
+/** 一句話的位置：x 為文字中心在相紙寬度上的比例（0–1），y 為基線距紙底的 mm。可在下帶內自由移動。 */
+export interface CaptionPos { x: number; y: number }
+export const CAPTION_POS_DEFAULT: CaptionPos = { x: 0.5, y: CAPTION.baselineFromBottomMm };
+export const CAPTION_Y_RANGE = { min: 4.5, max: 19 } as const; // 下帶 22 mm 內，上緣留 3 mm
+/** 文字放在照片上時：墨色依底下亮度自動選 */
+export type CaptionPlace = "band" | "photo";
+export type CaptionInk = "light" | "dark";
+export const CAPTION_ON_PHOTO = { light: "#F4F1EA", dark: "#2A2724", lumThreshold: 0.55 } as const;
+/** 一句話的字高（mm）：連續值，預設 3.2，可在相紙上直接縮放 */
+export type CaptionSize = "s" | "m" | "l"; // 舊欄位，相容用
+export const CAPTION_SIZE = { min: 2, max: 14, default: 3.2 } as const;
+/** 旋轉：整圈都可以，角度正規化到 (-180, 180]；接近 0 / ±90 / 180 的 ±3° 吸回正角 */
+export const CAPTION_ROTATE = { min: -180, max: 180, snap: 3 } as const;
+export const normalizeRotate = (v: number) => {
+  const r = ((((v + 180) % 360) + 360) % 360) - 180; // (-180, 180]
+  return r === -180 ? 180 : r;
+};
+export const captionRotate = (spec: Pick<PrintSpec, "captionRotate">) => normalizeRotate(Math.round(spec.captionRotate ?? 0));
+/** 四個正角附近吸附 */
+export const snapRotate = (v: number) => {
+  const r = normalizeRotate(Math.round(v));
+  for (const t of [0, 90, -90, 180]) if (Math.abs(r - t) <= CAPTION_ROTATE.snap) return t;
+  if (Math.abs(r + 180) <= CAPTION_ROTATE.snap) return 180;
+  return r;
+};
+/** 一句話的顏色：留空為自動（下帶用紙色對應的墨，照片上依底色亮度選淺或深） */
+export const CAPTION_COLORS = [
+  { key: "ink", name: "墨黑", hex: "#2A2724" },
+  { key: "paper", name: "紙白", hex: "#F4F1EA" },
+  { key: "pencil", name: "鉛筆灰", hex: "#7D776C" },
+  { key: "vermilion", name: "朱砂", hex: "#C4302B" },
+  { key: "amber", name: "琥珀", hex: "#E3A04F" },
+  { key: "indigo", name: "藍墨", hex: "#2E4A6B" },
+  { key: "moss", name: "墨綠", hex: "#3F5A47" },
+] as const;
+export const isHexColor = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+/** 相對亮度 0–1（sRGB 近似），用來決定柔影要用深或淺 */
+export function hexLuminance(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [16, 8, 0].map((sh) => ((n >> sh) & 255) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+export const captionColorName = (hex: string) => CAPTION_COLORS.find((c) => c.hex.toLowerCase() === hex.toLowerCase())?.name ?? hex.toUpperCase();
+const LEGACY_SIZE: Record<CaptionSize, number> = { s: 2.6, m: 3.2, l: 4.2 };
+/** 文字框相對基線的上下延伸（以字高為單位），依實測取整個字框都留在安全區內 */
+export const CAPTION_ASCENT = 1.1;
+export const CAPTION_DESCENT = 0.4;
+
+/** 一句話可選的字體。web 用 Google Fonts，列印用 assets/fonts 內的同名字體檔。 */
+export type CaptionFont = "hand" | "serif" | "sans" | "mono";
+export const CAPTION_FONTS: { key: CaptionFont; name: string; hint: string; family: string; file: string; sizeMul: number; letterSpacing: string }[] = [
+  { key: "hand", name: "手寫", hint: "像在拍立得下面寫字", family: "'LXGW WenKai TC', 'Kaiti TC', serif", file: "LXGWWenKaiTC-Regular.ttf", sizeMul: 1, letterSpacing: "0" },
+  { key: "serif", name: "宋體", hint: "像攝影集的圖說", family: "'Noto Serif TC', 'Songti TC', serif", file: "NotoSerifTC-Regular.otf", sizeMul: 0.92, letterSpacing: "0.04em" },
+  { key: "sans", name: "黑體", hint: "乾淨、現代", family: "'Noto Sans TC', 'PingFang TC', sans-serif", file: "NotoSansTC-Regular.otf", sizeMul: 0.9, letterSpacing: "0.06em" },
+  { key: "mono", name: "打字", hint: "像底片邊緣的日期", family: "'IBM Plex Mono', 'LXGW WenKai TC', monospace", file: "IBMPlexMono-Regular.ttf", sizeMul: 0.85, letterSpacing: "0.1em" },
+];
+export const captionFont = (key?: CaptionFont | null) => CAPTION_FONTS.find((f) => f.key === key) ?? CAPTION_FONTS[0];
 
 /** 裁切後有效像素門檻（短邊, 長邊） */
 export const MIN_PX = { ok: [1200, 1800], warn: [800, 1200] } as const;
@@ -49,6 +107,19 @@ export interface PrintSpec {
   frame: FrameStyle;
   paper: PaperKey;
   caption: string;
+  captionFont?: CaptionFont;
+  /** 舊欄位（s/m/l），新資料用 captionSizeMm */
+  captionSize?: CaptionSize;
+  captionSizeMm?: number;
+  /** 旋轉角度（度），順時針為正，整圈皆可（存 -180–180） */
+  captionRotate?: number;
+  /** 一句話的顏色 #RRGGBB；未設定為自動 */
+  captionColor?: string;
+  captionPos?: CaptionPos;
+  /** 舊欄位，已不使用：放置方式由位置推導（見 captionPlace()） */
+  captionPlace?: CaptionPlace;
+  /** 壓在照片上時的墨色，由前端依底色亮度決定並存下，列印端沿用 */
+  captionInk?: CaptionInk;
   finish: Finish;
 }
 
@@ -129,6 +200,10 @@ export function defaultSpec(original: { w: number; h: number }): PrintSpec {
     frame: "polaroid",
     paper: "white",
     caption: "",
+    captionFont: "hand",
+    captionSizeMm: CAPTION_SIZE.default,
+    captionRotate: 0,
+    captionPos: { ...CAPTION_POS_DEFAULT },
     finish: "glossy",
   };
 }
@@ -165,4 +240,75 @@ export function paperHex(key: PaperKey, custom?: Record<string, string> | null) 
 
 export function captionInk(key: PaperKey) {
   return key === "black" ? CAPTION_INK.onDark : CAPTION_INK.onLight;
+}
+
+type SpecGeo = Pick<PrintSpec, "frame" | "orientation" | "caption" | "captionPos" | "captionSize" | "captionSizeMm" | "captionFont">;
+
+/** 字高 mm：使用者設定的字高 × 字體的 sizeMul，夾在允許範圍內 */
+/** 一句話的估計寬度（以字高為單位）：全形字 1、半形 0.55、空白 0.3，再加字距 */
+export function captionTextEm(text: string, font: CaptionFont | undefined) {
+  const ls = parseFloat(captionFont(font).letterSpacing) || 0;
+  let em = 0;
+  for (const ch of text.trim()) em += (ch === " " ? 0.3 : ch.charCodeAt(0) > 0x2e80 ? 1 : 0.55) + ls;
+  return em;
+}
+/** 這句話在這張紙上最大能放的字高（使用者設定值，未乘 sizeMul）：整句要放得進安全區的寬度 */
+export function captionMaxSizeMm(spec: Pick<PrintSpec, "orientation" | "caption" | "captionFont">) {
+  const em = captionTextEm(spec.caption ?? "", spec.captionFont) * captionFont(spec.captionFont).sizeMul;
+  if (em <= 0) return CAPTION_SIZE.max;
+  const usable = paperSize(spec.orientation).w - SAFE_INSET * 2;
+  return Math.max(CAPTION_SIZE.min, Math.min(CAPTION_SIZE.max, Math.floor((usable / em) * 10) / 10));
+}
+export function captionSizeMm(spec: Pick<PrintSpec, "captionSize" | "captionSizeMm" | "captionFont" | "orientation" | "caption">) {
+  const base = spec.captionSizeMm ?? (spec.captionSize ? LEGACY_SIZE[spec.captionSize] : CAPTION_SIZE.default);
+  return Math.max(CAPTION_SIZE.min, Math.min(captionMaxSizeMm(spec), base)) * captionFont(spec.captionFont).sizeMul;
+}
+
+/** 照片下緣距紙底的 mm（拍立得 = 22，其餘 = 框厚） */
+function photoBottomMm(spec: Pick<PrintSpec, "frame" | "orientation">) {
+  const paper = paperSize(spec.orientation);
+  const area = photoArea(spec.orientation, spec.frame);
+  return paper.h - (area.y + area.h);
+}
+
+/** 預設位置：拍立得在下帶正中；其他框在照片下緣往上一點 */
+export function captionDefaultPos(spec: Pick<PrintSpec, "frame" | "orientation" | "caption" | "captionSize" | "captionSizeMm" | "captionFont">): CaptionPos {
+  if (spec.frame === "polaroid") return { ...CAPTION_POS_DEFAULT };
+  const r = captionYRange(spec);
+  return { x: 0.5, y: Math.max(r.min, photoBottomMm(spec) + 4) };
+}
+
+/** 文字實際落在哪：由位置決定。基線落在照片下緣以下就是「帶」，否則就是壓在照片上。 */
+export function captionPlace(spec: SpecGeo): CaptionPlace {
+  if (spec.frame !== "polaroid") return "photo";
+  const y = spec.captionPos?.y ?? CAPTION_POS_DEFAULT.y;
+  return y < photoBottomMm(spec) ? "band" : "photo";
+}
+
+/**
+ * 文字 y（基線距紙底 mm）的合法範圍。
+ * 唯一規則：整個文字框離紙的四邊至少 SAFE_INSET，三種框、帶內或照片上都一樣。
+ */
+export function captionYRange(spec: Pick<PrintSpec, "frame" | "orientation" | "caption" | "captionSize" | "captionSizeMm" | "captionFont">) {
+  const paper = paperSize(spec.orientation);
+  const size = captionSizeMm(spec);
+  const min = SAFE_INSET + CAPTION_DESCENT * size;
+  const max = paper.h - SAFE_INSET - CAPTION_ASCENT * size;
+  return { min, max: Math.max(min, max) };
+}
+
+export function captionPos(spec: SpecGeo): CaptionPos {
+  const r = captionYRange(spec);
+  const p = spec.captionPos ?? captionDefaultPos(spec);
+  return { x: clamp01(p.x), y: Math.max(r.min, Math.min(r.max, p.y)) };
+}
+
+/** 文字可放置的水平範圍（相紙寬度比例）：同樣只看安全區，與框和放置方式無關 */
+export function captionXBounds(spec: Pick<PrintSpec, "orientation">) {
+  const paper = paperSize(spec.orientation);
+  return { min: SAFE_INSET / paper.w, max: 1 - SAFE_INSET / paper.w };
+}
+
+export function captionInkHex(ink: CaptionInk | undefined) {
+  return ink === "light" ? CAPTION_ON_PHOTO.light : CAPTION_ON_PHOTO.dark;
 }

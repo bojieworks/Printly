@@ -18,6 +18,14 @@ const specSchema = z.object({
   frame: z.enum(["none", "thin", "polaroid"]),
   paper: z.enum(["white", "cream", "black", "sage", "tea"]),
   caption: z.string().max(CAPTION.maxChars).default(""),
+  captionFont: z.enum(["hand", "serif", "sans", "mono"]).default("hand"),
+  captionPos: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(148) }).optional(),
+  captionPlace: z.enum(["band", "photo"]).optional(),
+  captionSize: z.enum(["s", "m", "l"]).optional(),
+  captionSizeMm: z.number().min(1).max(16).optional(),
+  captionRotate: z.number().min(-180).max(180).optional(),
+  captionColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  captionInk: z.enum(["light", "dark"]).optional(),
   finish: z.enum(["glossy", "matte"]),
 });
 
@@ -38,7 +46,7 @@ export const POST = handler(async (req) => {
   if (!album || !album.visible) return fail("這本已經收起來了", 404);
   const photo = await getPhotoByFrame(album.id, body.frameNo);
   if (!photo || !photo.visible) return fail("找不到這張", 404);
-  const spec: PrintSpec = { ...body.spec, caption: body.spec.frame === "polaroid" ? body.spec.caption.trim() : "" };
+  const spec: PrintSpec = { ...body.spec, caption: body.spec.caption.trim() };
   if (spec.crop.x + spec.crop.w > 1.0001 || spec.crop.y + spec.crop.h > 1.0001) return fail("裁切超出範圍");
   const st = await getSettings();
   if (!st.finishEnabled) spec.finish = "glossy";

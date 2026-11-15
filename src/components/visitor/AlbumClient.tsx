@@ -7,7 +7,7 @@ import { store } from "@/lib/client-store";
 import type { PhotoView } from "@/lib/queries";
 
 /** 相簿總覽的互動層：記到書架、已印格、底片攤開並捲到引導行、記住模式 */
-export function AlbumClient({ code, photos, mode, justOpened, children }: { code: string; photos: PhotoView[]; mode: "pages" | "sheet"; justOpened: boolean; children: React.ReactNode }) {
+export function AlbumClient({ code, photos, mode, justOpened, stampChar, children }: { code: string; photos: PhotoView[]; mode: "pages" | "sheet"; justOpened: boolean; stampChar: string; children: React.ReactNode }) {
   const router = useRouter();
   const [printed, setPrinted] = useState<string[]>([]);
   const [unroll, setUnroll] = useState(false);
@@ -24,8 +24,8 @@ export function AlbumClient({ code, photos, mode, justOpened, children }: { code
       router.replace(url.pathname + url.search);
       return;
     }
+    setUnroll(true);
     if (justOpened) {
-      setUnroll(true);
       url.searchParams.delete("opened");
       history.replaceState(history.state, "", url.pathname + url.search);
       const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -39,10 +39,10 @@ export function AlbumClient({ code, photos, mode, justOpened, children }: { code
   return (
     <>
       <div className="guide" id="guide">
-        <span className="g">翻開了。<b>點一張你想印的</b>，一本只能印一張。</span>
-        <span className="n">{photos.length} 張 · 選 1 張</span>
+        <p className="g">翻開了。<b>點一張你想印的。</b></p>
+        <p className="n">{photos.length} 張裡挑 1 張，一人一張。</p>
       </div>
-      <FilmStrip photos={photos} hrefFor={(p) => `/a/${code}/f/${p.frameNo}`} printedIds={printed} unroll={unroll} />
+      <FilmStrip photos={photos} hrefFor={(p) => `/a/${code}/f/${p.frameNo}`} printedIds={printed} unroll={unroll} drift stampChar={stampChar} />
       {children}
     </>
   );

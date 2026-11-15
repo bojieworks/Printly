@@ -72,7 +72,7 @@ export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(), // 永遠是 1
   studioName: text("studio_name").notNull().default("Jay's Print Room"),
   stampChar: text("stamp_char").notNull().default("傑"),
-  successStory: text("success_story").notNull().default("我會用 Canon SELPHY 印在 100 × 148 mm 的相紙上，印好之後拿給你。"),
+  successStory: text("success_story").notNull().default("印好之後，親手拿給你。"),
   calibration: text("calibration", { mode: "json" }).$type<{ top: number; right: number; bottom: number; left: number } | null>(),
   paperColors: text("paper_colors", { mode: "json" }).$type<Record<string, string> | null>(),
   finishEnabled: integer("finish_enabled", { mode: "boolean" }).notNull().default(true),

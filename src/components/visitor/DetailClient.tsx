@@ -7,7 +7,7 @@ import { store } from "@/lib/client-store";
 import type { PhotoView } from "@/lib/queries";
 
 /** 詳情：大圖、左右、全螢幕、抬起。DESIGN_SYSTEM §3.11 */
-export function DetailClient({ code, photos, index }: { code: string; photos: PhotoView[]; index: number }) {
+export function DetailClient({ code, photos, index, stampChar }: { code: string; photos: PhotoView[]; index: number; stampChar: string }) {
   const router = useRouter();
   const p = photos[index];
   const prev = photos.length > 1 ? photos[(index - 1 + photos.length) % photos.length] : null;
@@ -133,7 +133,7 @@ export function DetailClient({ code, photos, index }: { code: string; photos: Ph
       {photos.length > 1 && (
         <div className="film-fixed above-bar">
           <div className="wrap" style={{ padding: 0 }}>
-            <FilmStrip thin photos={photos} hrefFor={href} currentId={p.id} printedIds={printed} ariaLabel="底片索引" />
+            <FilmStrip thin photos={photos} hrefFor={href} currentId={p.id} printedIds={printed} ariaLabel="底片索引" stampChar={stampChar} />
           </div>
         </div>
       )}

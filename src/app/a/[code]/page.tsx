@@ -48,7 +48,7 @@ export default async function AlbumPage({ params, searchParams }: Props) {
             <Link className="btn txt" href="/">回到書架</Link>
           </div>
         ) : (
-          <AlbumClient code={album.code} photos={photos} mode={mode} justOpened={sp.opened === "1"}>
+          <AlbumClient code={album.code} photos={photos} mode={mode} justOpened={sp.opened === "1"} stampChar={st.stampChar}>
             <div className="modes">
               <ModeSwitch code={album.code} mode={mode} />
             </div>

@@ -18,7 +18,7 @@ export default async function EditPage({ params }: Props) {
     <div className="wrap">
       <TopBar studio={st.studioName} inAlbum crumbs={[{ label: album.title, href: `/a/${album.code}` }, { label: p.frameNo, kind: "frame", href: `/a/${album.code}/f/${p.frameNo}` }]} right={<Steps step={1} />} />
       <main id="main" className="view-in">
-        <EditorClient code={album.code} photo={p} photos={photos} paperColors={st.paperColors} finishEnabled={st.finishEnabled} calibrated={!!st.calibration} />
+        <EditorClient code={album.code} photo={p} photos={photos} paperColors={st.paperColors} finishEnabled={st.finishEnabled} calibrated={!!st.calibration} stampChar={st.stampChar} />
       </main>
     </div>
   );
