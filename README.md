@@ -15,8 +15,9 @@ pnpm dev
 - 訪客：http://localhost:3000
 - 管理：http://localhost:3000/admin （預設密碼 `print`，在 `.env.local` 的 `ADMIN_PASSWORD` 改）
 - 資料與照片在 `./data/`（已被 git 忽略）
+- 用手機實機看開發站：手機與 Mac 同一個 Wi‑Fi，開 `http://<Mac 的 IP>:3000`。`next.config.ts` 的 `allowedDevOrigins` 已放行 `192.168.0.*`；若你的區網不是這個網段，改那一行，否則頁面能載入但不會 hydration（無法互動）。Mac 防火牆開著時要放行 node。
 
-流程：管理端建相簿 → 上傳照片 → 相簿設為「可見」→ 複製連結傳給朋友。
+流程：管理端建相簿 → 上傳照片 → 相簿設為「可見」→ 複製連結傳給朋友。訪客在確認頁可以選要不要連真實相框（白色 / 木紋）一起，可在設定關閉。
 
 ## 架構
 

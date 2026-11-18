@@ -20,7 +20,7 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY, short_code TEXT NOT NULL UNIQUE, album_id TEXT NOT NULL, photo_id TEXT NOT NULL,
     spec TEXT NOT NULL, effective_w INTEGER NOT NULL, effective_h INTEGER NOT NULL, guest_name TEXT NOT NULL,
-    note TEXT NOT NULL DEFAULT '', device_hint TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'new',
+    note TEXT NOT NULL DEFAULT '', device_hint TEXT NOT NULL DEFAULT '', physical_frame TEXT NOT NULL DEFAULT 'none', status TEXT NOT NULL DEFAULT 'new',
     print_key TEXT, print_generated_at TEXT, created_at TEXT NOT NULL, printed_at TEXT, delivered_at TEXT)`,
   `CREATE INDEX IF NOT EXISTS orders_status ON orders(status, created_at)`,
   `CREATE TABLE IF NOT EXISTS uploads (
@@ -29,7 +29,7 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY, studio_name TEXT NOT NULL DEFAULT 'Jay''s Print Room', stamp_char TEXT NOT NULL DEFAULT '傑',
     success_story TEXT NOT NULL DEFAULT '印好之後，親手拿給你。',
-    calibration TEXT, paper_colors TEXT, finish_enabled INTEGER NOT NULL DEFAULT 1, checklist TEXT NOT NULL DEFAULT '[]',
+    calibration TEXT, paper_colors TEXT, finish_enabled INTEGER NOT NULL DEFAULT 1, physical_frame_enabled INTEGER NOT NULL DEFAULT 1, checklist TEXT NOT NULL DEFAULT '[]',
     login_fails INTEGER NOT NULL DEFAULT 0, login_locked_until TEXT)`,
   `INSERT OR IGNORE INTO settings (id) VALUES (1)`,
   `UPDATE settings SET success_story = '印好之後，親手拿給你。' WHERE id = 1 AND success_story = '我會用 Canon SELPHY 印在 100 × 148 mm 的相紙上，印好之後拿給你。'`,
@@ -53,12 +53,22 @@ export function db(): DB {
   return g.__printly_db;
 }
 
+async function addColumnIfMissing(table: string, column: string, ddl: string) {
+  const c = g.__printly_client!;
+  const info = await c.execute(`PRAGMA table_info(${table})`);
+  if (info.rows.some((r) => r.name === column)) return;
+  await c.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+
 /** 第一次使用前把表建好。冪等，可在每個請求呼叫。 */
 export async function ready() {
   if (!g.__printly_ready) {
     db();
     g.__printly_ready = (async () => {
       for (const sql of DDL) await g.__printly_client!.execute(sql);
+      // 既有資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會改舊表）
+      await addColumnIfMissing("orders", "physical_frame", "TEXT NOT NULL DEFAULT 'none'");
+      await addColumnIfMissing("settings", "physical_frame_enabled", "INTEGER NOT NULL DEFAULT 1");
     })();
   }
   await g.__printly_ready;

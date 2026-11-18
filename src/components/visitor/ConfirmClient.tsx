@@ -6,13 +6,15 @@ import { Proof } from "@/components/Proof";
 import { api, deviceHint, store } from "@/lib/client-store";
 import { FINISH_NAME, FRAME_NAME, ORIENTATION_NAME, PAPER_COLORS, TONE_NAME, captionColorName, captionFont, captionPlace, captionRotate, captionSizeMm, defaultSpec, isHexColor, type PrintSpec } from "@/lib/print-spec";
 import type { PhotoView } from "@/lib/queries";
+import { PHYSICAL_FRAMES, type PhysicalFrame } from "@/lib/order-options";
 
-export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { code: string; photo: PhotoView; paperColors: Record<string, string> | null; finishEnabled: boolean }) {
+export function ConfirmClient({ code, photo, paperColors, finishEnabled, physicalFrameEnabled }: { code: string; photo: PhotoView; paperColors: Record<string, string> | null; finishEnabled: boolean; physicalFrameEnabled: boolean }) {
   const router = useRouter();
   const original = useMemo(() => ({ w: photo.width, h: photo.height }), [photo.width, photo.height]);
   const [spec, setSpec] = useState<PrintSpec | null>(null);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
+  const [pframe, setPframe] = useState<PhysicalFrame>("none"); // 真實相框，訂單層級
   const [nameErr, setNameErr] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
     setBusy(true);
     store.setGuestName(n);
     try {
-      const r = await api<{ shortCode: string }>("/api/orders", { method: "POST", json: { code, frameNo: photo.frameNo, spec, guestName: n, note: note.trim(), deviceHint: deviceHint() } });
+      const r = await api<{ shortCode: string }>("/api/orders", { method: "POST", json: { code, frameNo: photo.frameNo, spec, guestName: n, note: note.trim(), deviceHint: deviceHint(), physicalFrame: physicalFrameEnabled ? pframe : "none" } });
       store.addPrinted(code, photo.frameNo);
       store.setSpec(code, photo.frameNo, null);
       router.replace(`/a/${code}/done/${r.shortCode}`);
@@ -75,6 +77,16 @@ export function ConfirmClient({ code, photo, paperColors, finishEnabled }: { cod
             <div className="r"><small>數量</small><b>1 張</b></div>
           </div>
           <div className="who">
+            {physicalFrameEnabled && (
+              <div className="line pframes-row">
+                <label id="pframe-lbl">相框</label>
+                <div className="chips" role="radiogroup" aria-labelledby="pframe-lbl">
+                  {PHYSICAL_FRAMES.map((f) => (
+                    <button key={f.key} role="radio" aria-checked={pframe === f.key} onClick={() => setPframe(f.key)}>{f.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className={`line${nameErr ? " err" : ""}`} style={{ maxWidth: 320 }}>
               <label htmlFor="guest">你的名字</label>
               <input id="guest" value={name} onChange={(e) => setName(e.target.value)} placeholder="讓我知道是誰" autoComplete="name" maxLength={40} />

@@ -67,6 +67,7 @@ export function SettingsForm({ settings, storageKind }: { settings: Settings; st
           ))}
         </div>
         <label className="chk" style={{ marginTop: 8 }}><input type="checkbox" checked={s.finishEnabled} onChange={(e) => patch({ finishEnabled: e.target.checked }, e.target.checked ? "訪客可以選表面" : "表面固定為光面")} /><i />開放訪客選擇光面 / 霧面</label>
+        <label className="chk" style={{ marginTop: 8 }}><input type="checkbox" checked={s.physicalFrameEnabled} onChange={(e) => patch({ physicalFrameEnabled: e.target.checked }, e.target.checked ? "訪客可以選相框" : "不提供相框")} /><i />開放訪客選擇真實相框（白色 / 木紋）</label>
       </div>
 
       <div className="sect">

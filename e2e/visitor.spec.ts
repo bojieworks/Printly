@@ -235,6 +235,10 @@ test.describe("訪客流程", () => {
     await expect(page.getByRole("heading", { name: "確認這一張" })).toBeVisible();
     await expect(page.locator(".sum")).toContainText("E2E 一句話");
     await expect(page.locator(".sum")).toContainText("1 張");
+    // 真實相框：摘要裡的「相框」列，純文字選項，預設不需要；完成頁會說會連相框一起
+    await expect(page.locator(".pframes-row [aria-checked='true']")).toHaveText("不需要");
+    await page.getByRole("radio", { name: "木紋" }).click();
+    await expect(page.locator(".pframes-row [aria-checked='true']")).toHaveText("木紋");
     await shot(page, info.project.name, "11-confirm", !isMobile(page));
     // 名字空白
     await page.locator("#guest").fill("");
@@ -246,6 +250,7 @@ test.describe("訪客流程", () => {
     await page.waitForURL(/\/done\//);
     await expect(page.getByRole("heading", { name: "收到了" })).toBeVisible();
     await expect(page.locator(".stamp")).toContainText("傑");
+    await expect(page.getByText("會連木紋相框一起")).toBeVisible();
     await expect(page.locator(".mono-sm", { hasText: "ORDER" })).toContainText(/ORDER \d{4}-\d{4}-\d{2}/);
     await page.waitForTimeout(1400);
     await shot(page, info.project.name, "12-done");

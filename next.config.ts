@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // 全站都是私人、依請求而變的內容，不需要 Cache Components。
   cacheComponents: false,
+  // 開發時讓區網裡的手機（用 Mac 的 IP 開站）也能連 HMR 與完成 hydration；正式環境不受影響。
+  allowedDevOrigins: ["192.168.0.*", "*.local", "localhost"],
+  // 開發用的 Next 浮動按鈕會蓋住手機底部動作列左側的按鈕，關掉。
+  devIndicators: false,
   serverExternalPackages: ["sharp", "@resvg/resvg-js", "heic-convert", "@libsql/client"],
   outputFileTracingIncludes: {
     "/api/**": ["./assets/fonts/**"],

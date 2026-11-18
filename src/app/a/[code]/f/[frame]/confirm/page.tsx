@@ -18,7 +18,7 @@ export default async function ConfirmPage({ params }: Props) {
     <div className="wrap">
       <TopBar studio={st.studioName} inAlbum crumbs={[{ label: album.title, href: `/a/${album.code}` }, { label: p.frameNo, kind: "frame", href: `/a/${album.code}/f/${p.frameNo}` }]} right={<Steps step={2} />} />
       <main id="main" className="view-in">
-        <ConfirmClient code={album.code} photo={p} paperColors={st.paperColors} finishEnabled={st.finishEnabled} />
+        <ConfirmClient code={album.code} photo={p} paperColors={st.paperColors} finishEnabled={st.finishEnabled} physicalFrameEnabled={st.physicalFrameEnabled} />
       </main>
     </div>
   );

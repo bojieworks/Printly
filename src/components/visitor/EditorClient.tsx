@@ -212,7 +212,7 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
                   aria-label="一句話"
                 />
                 <span className="cnt">{spec.caption.length} / {CAPTION.maxChars}</span>
-                {spec.caption && <div className="row-hint">直接拖曳相紙上的字到想要的位置{spec.frame === "polaroid" ? "，拖到照片上也可以" : ""}；點字後可用方向鍵微調。</div>}
+                {spec.caption && <div className="row-hint">直接拖曳相紙上的字到想要的位置{spec.frame === "polaroid" ? "，拖到照片上也可以" : ""}{isMobile ? "；手指按在字附近就能拖。" : "；點字後可用方向鍵微調。"}</div>}
               </div>
             </div>
           )}
@@ -266,7 +266,7 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
                   aria-label="一句話的字高"
                 />
                 <span className="mono">{captionSizeMm(spec).toFixed(1)} mm</span>
-                <div className="row-hint">{captionMaxSizeMm(spec) < CAPTION_SIZE.max ? `這句話的長度最大放到 ${captionMaxSizeMm(spec).toFixed(1)} mm，想更大就寫短一點。` : ""}{isMobile ? "也可以在相紙上雙指縮放文字。" : "也可以把游標放在字上滾動滾輪，或拖曳字右下角的小點。"}</div>
+                <div className="row-hint">{captionMaxSizeMm(spec) < CAPTION_SIZE.max ? `這句話的長度最大放到 ${captionMaxSizeMm(spec).toFixed(1)} mm，想更大就寫短一點。` : ""}{isMobile ? "也可以拖字右下角的圓點縮放，或雙指縮放。" : "也可以把游標放在字上滾動滾輪，或拖曳字右下角的小點。"}</div>
               </div>
             </div>
           )}
@@ -285,7 +285,7 @@ export function EditorClient({ code, photo, photos, paperColors, finishEnabled, 
                   aria-label="一句話的旋轉角度"
                 />
                 <span className="mono">{captionRotate(spec)}°{captionRotate(spec) !== 0 && <button className="btn txt" style={{ marginLeft: 12, fontSize: 11 }} onClick={() => update({ captionRotate: 0 })}>歸零</button>}</span>
-                <div className="row-hint">{isMobile ? "整圈都可以轉；也可以在相紙上雙指扭轉文字。" : "整圈都可以轉；也可以拖曳字上方的小把手。"}</div>
+                <div className="row-hint">{isMobile ? "整圈都可以轉；也可以拖字上方的圓形把手，或雙指扭轉。" : "整圈都可以轉；也可以拖曳字上方的小把手。"}</div>
               </div>
             </div>
           )}

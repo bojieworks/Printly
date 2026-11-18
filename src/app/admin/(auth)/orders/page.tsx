@@ -20,6 +20,7 @@ export default async function OrdersPage({ searchParams }: Props) {
     frameNo: r.photo.frameNo,
     thumb: toPhotoView(r.photo).sizes["480"] ?? "",
     spec: r.order.spec,
+    physicalFrame: r.order.physicalFrame ?? "none",
     status: r.order.status,
   }));
   return (

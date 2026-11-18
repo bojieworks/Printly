@@ -5,10 +5,11 @@ import { useState } from "react";
 import { toast } from "@/components/Toast";
 import { api } from "@/lib/client-store";
 import { FINISH_NAME, FRAME_NAME, PAPER_COLORS, type PrintSpec } from "@/lib/print-spec";
+import { PHYSICAL_FRAME_NAME, type PhysicalFrame } from "@/lib/order-options";
 
 export const STATUS_NAME = { new: "新進", printed: "已列印", delivered: "已交付" } as const;
 type Status = keyof typeof STATUS_NAME;
-interface Row { id: string; shortCode: string; createdAt: string; guestName: string; albumTitle: string; albumId: string; frameNo: string; thumb: string; spec: PrintSpec; status: Status }
+interface Row { id: string; shortCode: string; createdAt: string; guestName: string; albumTitle: string; albumId: string; frameNo: string; thumb: string; spec: PrintSpec; physicalFrame: PhysicalFrame; status: Status }
 
 export const fmtTime = (iso: string) => {
   const d = new Date(iso);
@@ -75,7 +76,7 @@ export function OrdersClient({ orders, counts, status, albumId, albums }: { orde
           <table>
             <thead><tr>
               <th style={{ width: 28 }}><label className="chk"><input type="checkbox" checked={orders.every((o) => sel.has(o.id))} onChange={(e) => setSel(e.target.checked ? new Set(orders.map((o) => o.id)) : new Set())} aria-label="全選" /><i /></label></th>
-              <th>短碼</th><th>時間</th><th>名字</th><th>相簿</th><th></th><th>格號</th><th>框</th><th>表面</th><th>狀態</th>
+              <th>短碼</th><th>時間</th><th>名字</th><th>相簿</th><th></th><th>格號</th><th>框</th><th>表面</th><th>相框</th><th>狀態</th>
             </tr></thead>
             <tbody>
               {orders.map((o) => (
@@ -89,6 +90,7 @@ export function OrdersClient({ orders, counts, status, albumId, albums }: { orde
                   <td className="m">{o.frameNo}</td>
                   <td>{frameLabel(o.spec)}</td>
                   <td>{FINISH_NAME[o.spec.finish]}</td>
+                  <td>{o.physicalFrame && o.physicalFrame !== "none" ? PHYSICAL_FRAME_NAME[o.physicalFrame] : <span className="muted">—</span>}</td>
                   <td><span className={`status ${o.status}`}>{STATUS_NAME[o.status]}</span></td>
                 </tr>
               ))}

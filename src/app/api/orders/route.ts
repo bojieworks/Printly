@@ -40,6 +40,7 @@ export const POST = handler(async (req) => {
       guestName: z.string().trim().min(1, "要留個名字").max(40),
       note: z.string().trim().max(200).default(""),
       deviceHint: z.string().max(60).default(""),
+      physicalFrame: z.enum(["none", "white", "wood"]).default("none"),
     }),
   );
   const album = await getAlbumByCode(body.code);
@@ -50,6 +51,7 @@ export const POST = handler(async (req) => {
   if (spec.crop.x + spec.crop.w > 1.0001 || spec.crop.y + spec.crop.h > 1.0001) return fail("裁切超出範圍");
   const st = await getSettings();
   if (!st.finishEnabled) spec.finish = "glossy";
+  const physicalFrame = st.physicalFrameEnabled ? body.physicalFrame : "none";
   if (resolutionLevel(spec, { w: photo.width, h: photo.height }) === "block") return fail("這張裁切後解析度太低，請放寬裁切範圍");
   const eff = effectivePixels(spec, { w: photo.width, h: photo.height });
 
@@ -74,6 +76,7 @@ export const POST = handler(async (req) => {
     guestName: body.guestName,
     note: body.note,
     deviceHint: body.deviceHint,
+    physicalFrame,
     status: "new",
     createdAt: nowIso(),
   });

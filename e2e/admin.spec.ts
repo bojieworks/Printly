@@ -75,6 +75,7 @@ test.describe("管理端", () => {
         spec: { orientation: "portrait", crop: { x: 0.3, y: 0, w: 0.44, h: 0.8 }, tone: "color", frame: "polaroid", paper: "cream", caption: "訂單測試", finish: "glossy" },
         guestName: `訂單 ${info.project.name}`,
         note: "請用霧面",
+        physicalFrame: "white",
       },
     });
     expect(pub.ok()).toBeTruthy();
@@ -86,8 +87,10 @@ test.describe("管理端", () => {
     await shot(page, info.project.name, "24-orders");
     // 以短碼儲存格精確比對，避免相鄰儲存格文字串接造成誤判
     const row = page.locator(".tbl tbody tr").filter({ has: page.getByText(shortCode, { exact: true }) });
+    await expect(row).toContainText("白色");
     await row.click();
     await page.waitForURL(/\/admin\/orders\/[^/]+$/);
+    await expect(page.locator(".kv").first()).toContainText("白色相框");
     await expect(page.getByRole("heading", { name: shortCode })).toBeVisible();
     await expect(page.locator(".proof .hand")).toContainText("訂單測試");
     await expect(page.locator(".kv").first()).toContainText("拍立得 · 米白");

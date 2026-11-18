@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import type { PrintSpec } from "@/lib/print-spec";
+import type { PhysicalFrame } from "@/lib/order-options";
 
 export const albums = sqliteTable("albums", {
   id: text("id").primaryKey(),
@@ -47,6 +48,8 @@ export const orders = sqliteTable("orders", {
   guestName: text("guest_name").notNull(),
   note: text("note").notNull().default(""),
   deviceHint: text("device_hint").notNull().default(""),
+  /** 真實相框：none / white / wood（訂單層級，不影響列印檔） */
+  physicalFrame: text("physical_frame").$type<PhysicalFrame>().notNull().default("none"),
   status: text("status").$type<"new" | "printed" | "delivered">().notNull().default("new"),
   printKey: text("print_key"),
   printGeneratedAt: text("print_generated_at"),
@@ -76,6 +79,7 @@ export const settings = sqliteTable("settings", {
   calibration: text("calibration", { mode: "json" }).$type<{ top: number; right: number; bottom: number; left: number } | null>(),
   paperColors: text("paper_colors", { mode: "json" }).$type<Record<string, string> | null>(),
   finishEnabled: integer("finish_enabled", { mode: "boolean" }).notNull().default(true),
+  physicalFrameEnabled: integer("physical_frame_enabled", { mode: "boolean" }).notNull().default(true),
   checklist: text("checklist", { mode: "json" }).$type<boolean[]>().notNull().default([]),
   loginFails: integer("login_fails").notNull().default(0),
   loginLockedUntil: text("login_locked_until"),

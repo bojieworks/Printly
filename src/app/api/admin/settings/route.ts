@@ -18,6 +18,7 @@ export const PATCH = handler(async (req) => {
       calibration: z.object({ top: z.number(), right: z.number(), bottom: z.number(), left: z.number() }).nullable().optional(),
       paperColors: z.record(z.string(), z.string().regex(/^#[0-9A-Fa-f]{6}$/)).nullable().optional(),
       finishEnabled: z.boolean().optional(),
+      physicalFrameEnabled: z.boolean().optional(),
       checklist: z.array(z.boolean()).optional(),
     }),
   );

@@ -3,6 +3,7 @@ import { TopBar } from "@/components/TopBar";
 import { Closed } from "@/components/visitor/Closed";
 import { DoneClient } from "@/components/visitor/DoneClient";
 import { getAlbumByCode, getOrderByShortCode, getSettings, toPhotoView } from "@/lib/queries";
+import { PHYSICAL_FRAME_NAME } from "@/lib/order-options";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ code: string; order: string }> };
@@ -23,6 +24,7 @@ export default async function DonePage({ params }: Props) {
         <h1 className="d2" style={{ letterSpacing: ".04em" }}>收到了</h1>
         <div className="lat-i" style={{ fontSize: 16 }}>Received · {p.frameNo}</div>
         <p className="story" style={{ textAlign: "center", marginTop: 8 }}>{st.successStory}</p>
+        {row.order.physicalFrame !== "none" && <p className="body-sm muted" style={{ textAlign: "center", margin: "4px 0 0" }}>會連{PHYSICAL_FRAME_NAME[row.order.physicalFrame]}相框一起。</p>}
         <div className="mono-sm" style={{ marginTop: 12 }}>ORDER {row.order.shortCode}</div>
         <div className="acts">
           <Link className="btn txt" href={`/a/${album.code}`}>回到相簿</Link>
